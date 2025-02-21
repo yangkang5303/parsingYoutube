@@ -16,6 +16,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 def get_video_info(url):
     """获取视频信息和字幕"""
+    # 基本配置
     ydl_opts = {
         'writesubtitles': True,
         'writeautomaticsub': True,
@@ -24,6 +25,10 @@ def get_video_info(url):
         'subtitlesformat': 'vtt',
         'outtmpl': 'subtitles.%(ext)s',
         'cookiesfrombrowser': ('chromium', os.path.expanduser('~/snap/chromium/common/chromium/Default/')),
+        'verbose': True,  # 添加详细输出
+        'no_warnings': False,  # 显示警告信息
+        'extract_flat': False,  # 获取完整信息
+        'force_generic_extractor': False,  # 不使用通用提取器
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -52,24 +57,23 @@ def extract_text_from_vtt(vtt_path):
     return ' '.join(text_lines)
 
 def download_video(url, output_dir="downloads"):
-    """下载视频
-    Args:
-        url: YouTube视频URL
-        output_dir: 保存视频的目录，默认为'downloads'
-    """
-    # 确保输出目录存在
+    """下载视频"""
     os.makedirs(output_dir, exist_ok=True)
     
-    # 配置yt-dlp选项，使用视频ID作为文件名
+    # 基本配置
     ydl_opts = {
         'format': 'best',
         'outtmpl': os.path.join(output_dir, '%(id)s.%(ext)s'),
+        'cookiesfrombrowser': ('chromium', os.path.expanduser('~/snap/chromium/common/chromium/Default/')),  # 使用 cookiesfrombrowser
+        'verbose': True,  # 添加详细输出
+        'no_warnings': False,  # 显示警告信息
+        'extract_flat': False,  # 获取完整信息
+        'force_generic_extractor': False,  # 不使用通用提取器
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download([url])
-            # 获取下载后的文件路径
             info = ydl.extract_info(url, download=False)
             video_id = info['id']
             video_ext = info['ext']
@@ -90,9 +94,9 @@ def transcribe_video(video_path):
     # 显示加载模型进度
     print("正在加载 Whisper 模型...")
     with tqdm(total=1, desc="加载模型", ncols=100, colour='green') as pbar:
-        model = whisper.load_model("small")
+        model = whisper.load_model("medium") # available models: tiny, base, small, medium, large
         pbar.update(1)
-    print("开始转录，使用模型: small")
+    print("开始转录，使用模型: medium")
     
     try:
         print("正在处理音频...")
@@ -208,18 +212,127 @@ def print_available_subtitles(info):
         for lang, subs in info['automatic_captions'].items():
             print(f"- {lang}")
 
+def save_text_to_file(text: str, filename: str = "output.txt"):
+    """保存文本到文件"""
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"\n文本已保存到文件: {filename}")
+        return True
+    except Exception as e:
+        print(f"保存文件时出错: {str(e)}")
+        return False
+
+def summarize_with_ollama(text: str) -> str:
+    """使用本地 Ollama API 调用 Llama3.2 进行总结"""
+    try:
+        import requests
+        
+        # Ollama API 端点
+        url = "http://localhost:11434/api/generate"
+        
+        # 准备提示词
+        prompt = """请总结以下文本的要点，并提供：
+        1. 10个关键要点
+        2. 2个批判性思考方向
+        3. 3个有趣的事实
+
+        文本内容：
+        """ + text
+        
+        # 发送请求
+        response = requests.post(url, json={
+            "model": "llama3.2",
+            "prompt": prompt,
+            "stream": False
+        })
+        
+        if response.status_code == 200:
+            return response.json()["response"]
+        else:
+            raise Exception(f"API 请求失败: {response.status_code}")
+            
+    except Exception as e:
+        print(f"使用 Ollama 总结时出错: {str(e)}")
+        return None
+
+def process_text(text: str):
+    """处理文本的主函数"""
+    while True:
+        print("\n请选择处理方式：")
+        print("1. 使用 GPT-4 总结文本")
+        print("2. 使用本地 Ollama (Llama2) 总结文本")
+        print("3. 保存文本到文件")
+        print("4. 退出")
+        
+        choice = input("\n请输入选项 (1-4): ").strip()
+        
+        if choice == "1":
+            try:
+                summary = summarize_with_gpt4(text, OPENAI_API_KEY)
+                if summary:
+                    print("\n视频总结：")
+                    print(summary)
+                else:
+                    print("\n生成总结失败")
+            except Exception as e:
+                print(f"\n总结过程出错: {str(e)}")
+                
+        elif choice == "2":
+            try:
+                summary = summarize_with_ollama(text)
+                if summary:
+                    print("\n视频总结：")
+                    print(summary)
+                else:
+                    print("\n生成总结失败")
+            except Exception as e:
+                print(f"\n总结过程出错: {str(e)}")
+                
+        elif choice == "3":
+            filename = input("\n请输入保存的文件名 (默认为 output.txt): ").strip()
+            if not filename:
+                filename = "output.txt"
+            save_text_to_file(text, filename)
+            
+        elif choice == "4":
+            break
+            
+        else:
+            print("\n无效的选项，请重新选择")
+
 def main():
-    # 获取 OpenAI API key
-    # api_key = input("请输入 OpenAI API Key: ")
-    # if not api_key:
-    #     print("错误：需要提供 OpenAI API Key")
-    #     return
-
-    url = input("请输入 YouTube 视频 URL: ")
-
-    # 获取视频信息
-    info = get_video_info(url)
+    print("\n请选择操作：")
+    print("1. 从 YouTube 下载并处理视频")
+    print("2. 处理本地视频文件")
     
+    choice = input("\n请输入选项 (1-2): ").strip()
+    
+    if choice == "1":
+        # 原有的 YouTube 处理流程
+        url = input("请输入 YouTube 视频 URL: ")
+        process_youtube_video(url)
+    elif choice == "2":
+        # 处理本地视频
+        video_path = input("请输入视频文件路径: ")
+        if os.path.exists(video_path):
+            text = transcribe_video(video_path)
+            if text is None:
+                print("转录失败")
+                return
+            
+            print("\n提取的文本：")
+            print(text)
+            process_text(text)
+        else:
+            print("找不到指定的视频文件")
+    else:
+        print("无效的选项")
+
+def process_youtube_video(url):
+    """处理 YouTube 视频的原有流程"""
+    # 将原来 main 函数中的 YouTube 处理逻辑移到这里
+    info = get_video_info(url)
     if info:
         print_available_subtitles(info)
     else:
@@ -232,7 +345,7 @@ def main():
     subtitle_lang = None
 
     # 按优先级检查字幕可用性
-    for lang in ['zh-Hans', 'zh-Hant', 'zh-TW', 'zh-Hant-TW', 'zh', 'en']:
+    for lang in ['zh-Hans','zh-Hans-zh-CN', 'zh-Hans-zh-CN', 'zh-TW', 'zh-Hant-TW', 'zh', 'en']:
         if 'subtitles' in info and lang in info['subtitles']:
             has_subtitles = True
             subtitle_lang = lang
@@ -252,7 +365,12 @@ def main():
             'subtitleslangs': [subtitle_lang],
             'skip_download': True,
             'subtitlesformat': 'vtt',
-            'outtmpl': 'subtitles'
+            'outtmpl': 'subtitles',
+            'cookiesfrombrowser': ('chromium', os.path.expanduser('~/snap/chromium/common/chromium/Default/')),  # 使用 cookiesfrombrowser
+            'verbose': True,
+            'no_warnings': False,
+            'extract_flat': False,
+            'force_generic_extractor': False,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -261,11 +379,10 @@ def main():
         subtitle_file = f'subtitles.{subtitle_lang}.vtt'
         if os.path.exists(subtitle_file):
             text = extract_text_from_vtt(subtitle_file)
-            #print(text)
-            # 使用 GPT-4 直接总结
-            summary = summarize_with_gpt4(text, OPENAI_API_KEY)
-            print("\n视频总结：")
-            print(summary)
+            print("\n提取的文本：")
+            print(text)
+            # 使用新的处理函数
+            process_text(text)
             return
         else:
             has_subtitles = False
@@ -290,18 +407,10 @@ def main():
         return
         
     print("\n提取的文本：")
-    #print(text)
+    print(text)
     
-    # 使用 GPT-4 总结文本
-    try:
-        summary = summarize_with_gpt4(text, OPENAI_API_KEY)
-        if summary:
-            print("\n视频总结：")
-            print(summary)
-        else:
-            print("\n生成总结失败")
-    except Exception as e:
-        print(f"\n总结过程出错: {str(e)}")
+    # 使用新的处理函数
+    process_text(text)
 
 if __name__ == "__main__":
     main() 

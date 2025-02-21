@@ -6,4 +6,5 @@ sentencepiece
 sacremoses
 jieba  # 用于中文分词
 protobuf==3.20.0  # 使用稳定版本
-openai  # 添加 OpenAI 依赖 
+openai  # 添加 OpenAI 依赖
+requests  # 用于 Ollama API 调用 
