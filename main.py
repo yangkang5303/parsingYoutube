@@ -19,11 +19,11 @@ def get_video_info(url):
     ydl_opts = {
         'writesubtitles': True,
         'writeautomaticsub': True,
-        # 支持更多语言，优先级：中文 > 英文
         'subtitleslangs': ['zh-Hans', 'zh', 'en'],
         'skip_download': True,
         'subtitlesformat': 'vtt',
-        'outtmpl': 'subtitles.%(ext)s'
+        'outtmpl': 'subtitles.%(ext)s',
+        'cookiesfrombrowser': ('chromium', os.path.expanduser('~/snap/chromium/common/chromium/Default/')),
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

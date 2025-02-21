@@ -32,6 +32,7 @@ eggs/
 # 虚拟环境
 venv/
 ENV/
+.venv/
 
 # IDE 相关
 .idea/
@@ -45,4 +46,4 @@ Thumbs.db
 
 # 配置文件
 config.py
-.env 
+.env
